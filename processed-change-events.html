@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Email Tracking Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body class="bg-gray-100 min-h-screen flex justify-center font-sans">
+  <div id="app" class="w-full bg-white shadow-lg rounded-lg p-6 mx-6">
+
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800">Processed Change Events</h1>
+      <div class="flex items-center space-x-2">
+        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+        <p class="text-gray-500 text-sm">AI actively monitoring emails</p>
+      </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium mb-1">Date Range</label>
+        <select v-model="filters.date" class="border rounded px-3 py-2">
+          <option>Today</option>
+          <option>This Week</option>
+          <option>This Month</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Status</label>
+        <select v-model="filters.status" class="border rounded px-3 py-2">
+          <option value="all">All</option>
+          <option value="Completed">Completed</option>
+          <option value="Pending Review">Pending Review</option>
+          <option value="Error">Error</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">AI Categories</label>
+        <select v-model="filters.aiCategory" class="border rounded px-3 py-2">
+          <option value="all">All Categories</option>
+          <option value="plumbing">Plumbing Issues</option>
+          <option value="electrical">Electrical Problems</option>
+          <option value="hvac">HVAC Concerns</option>
+          <option value="errors">AI Detection Errors</option>
+        </select>
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">User</label>
+        <input v-model="filters.user" placeholder="Search user..." class="border rounded px-3 py-2 w-full" />
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div v-if="filteredEmails.length > 0" class="overflow-x-auto">
+      <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+        <thead class="bg-gray-50 text-left text-gray-600 text-sm uppercase">
+          <tr>
+            <th class="px-4 py-3 border">Title</th>
+            <th class="px-4 py-3 border">Project Number</th>
+            <th class="px-4 py-3 border">Project Address</th>
+            <th class="px-4 py-3 border">User</th>
+            <th class="px-4 py-3 border">Received</th>
+            <th class="px-4 py-3 border">Status</th>
+            <th class="px-4 py-3 border">Sync</th>
+            <th class="px-4 py-3 border">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="(email, index) in filteredEmails" :key="index">
+            <!-- Main row -->
+            <tr class="hover:bg-gray-50 cursor-pointer" @click="toggle(email)">
+              <td class="px-4 py-3 border">
+                <div class="font-medium text-gray-800">{{ email.subject }}</div>
+              </td>
+              <td class="px-4 py-3 border">{{ email.projectNumber }}</td>
+              <td class="px-4 py-3 border">{{ email.projectAddress }}</td>
+              <td class="px-4 py-3 border">{{ email.user }}</td>
+              <td class="px-4 py-3 border text-sm text-gray-600">{{ email.time }}</td>
+              <td class="px-4 py-3 border">
+                <span :class="{
+                    'px-2 py-1 rounded text-xs font-medium': true,
+                    'bg-green-100 text-green-700': email.status==='Completed',
+                    'bg-yellow-100 text-yellow-700': email.status==='Pending Review',
+                    'bg-red-100 text-red-700': email.status==='Error'
+                  }">
+                  {{ email.status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 border">
+                <div v-if="email.syncing" class="text-yellow-600">Syncing...</div>
+                <div v-else-if="email.synced" class="text-green-600">Synced</div>
+                <div v-else-if="email.syncError" class="text-red-600">
+                  Sync Failed
+                  <button @click.stop="retrySync(email)" class="text-blue-600 hover:underline ml-2">Retry</button>
+                </div>
+                <div v-else>
+                  <button @click.stop="approveAndSync(email)"
+                    class="px-2 py-1 bg-blue-500 text-white rounded hover:bg-blue-600">
+                    Approve & Sync
+                  </button>
+                </div>
+              </td>
+              <td class="px-4 py-3 border space-x-4">
+                <button @click.stop="toggle(email)" class="text-gray-600 hover:text-blue-600" aria-label="Expand">
+                  <i class="fa-solid fa-expand h-5 w-5"></i>
+                </button>
+                <button @click.stop="viewActivityLog(email)" class="text-gray-600 hover:text-blue-600"
+                  aria-label="Activity Log">
+                  <i class="fa-solid fa-list h-5 w-5"></i>
+                </button>
+              </td>
+            </tr>
+
+            <!-- Expanded row with AI extraction -->
+            <tr v-if="email.open">
+              <td colspan="8" class="px-6 py-4 bg-gray-50 border text-sm text-gray-700">
+                <div class="space-y-4">
+                  <!-- Side-by-Side Layout: Project Information and AI Recommendations -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Project Information -->
+                    <div class="bg-white p-3 rounded border">
+                      <span class="font-semibold text-gray-600">Project Information:</span>
+                      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 items-center">
+
+                        <!-- Project Number -->
+                        <label class="text-sm font-medium text-gray-600">Project Number:</label>
+                        <input v-model="email.projectNumber" class="border rounded px-3 py-2 w-full" />
+
+                        <!-- Address -->
+                        <label class="text-sm font-medium text-gray-600">Address:</label>
+                        <input v-model="email.projectAddress" class="border rounded px-3 py-2 w-full" />
+
+                        <!-- Trade -->
+                        <label class="text-sm font-medium text-gray-600">Trade:</label>
+                        <input v-model="email.trade" class="border rounded px-3 py-2 w-full" />
+
+                        <!-- Issue -->
+                        <label class="text-sm font-medium text-gray-600">Issue:</label>
+                        <input v-model="email.issue" class="border rounded px-3 py-2 w-full" />
+
+                        <!-- Type -->
+                        <label class="text-sm font-medium text-gray-600">Type:</label>
+                        <select v-model="email.type" class="border rounded px-3 py-2 w-full">
+                          <option value="Allowance">Allowance</option>
+                          <option value="Contingency">Contingency</option>
+                          <option value="Owner Change">Owner Change</option>
+                          <option value="TBD">TBD</option>
+                          <option value="Transfer">Transfer</option>
+                        </select>
+
+                        <!-- Source -->
+                        <label class="text-sm font-medium text-gray-600">Source:</label>
+                        <select v-model="email.source" class="border rounded px-3 py-2 w-full">
+                          <option value="Email">Email</option>
+                          <option value="Teams">Teams</option>
+                        </select>
+
+                        <!-- Change Reason -->
+                        <label class="text-sm font-medium text-gray-600">Change Reason:</label>
+                        <select v-model="email.changeReason" class="border rounded px-3 py-2 w-full">
+                          <option value="Allowance">Allowance</option>
+                          <option value="Backcharge">Backcharge</option>
+                          <option value="Client Request">Client Request</option>
+                          <option value="Design Development">Design Development</option>
+                          <option value="Existing Condition">Existing Condition</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <!-- Line Items -->
+                    <div class="bg-white p-3 rounded border">
+                      <span class="font-semibold text-gray-600">Line Items:</span>
+                      <div class="mt-3">
+                        <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+                          <thead class="bg-gray-50 text-left text-gray-600 text-sm uppercase">
+                            <tr>
+                              <th class="px-4 py-3 border">Description</th>
+                              <th class="px-4 py-3 border">$ Cost</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr v-for="(item, index) in email.lineItems" :key="index" class="hover:bg-gray-50">
+                              <td class="px-4 py-3 border">{{ item.description }}</td>
+                              <td class="px-4 py-3 border text-right">${{ item.cost.toFixed(2) }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Side-by-Side Layout: Line Items and Attachments -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+                    <!-- Attachments -->
+                    <div class="bg-white p-3 rounded border">
+                      <span class="font-semibold text-gray-600">Attachments:</span>
+                      <div class="mt-2 space-y-2">
+                        <div v-if="email.attachments && email.attachments.length > 0"
+                          class="flex items-center space-x-2" v-for="(attachment, index) in email.attachments"
+                          :key="index">
+                          <i class="fa-solid fa-paperclip text-gray-600"></i>
+                          <a :href="attachment.url" target="_blank" class="text-blue-600 hover:underline text-sm">
+                            {{ attachment.name }}
+                          </a>
+                        </div>
+                        <div v-else class="text-sm text-gray-500">
+                          No attachments available
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Confidence Score -->
+                  <div class="flex items-center justify-between text-xs text-gray-500">
+                    <div class="flex items-center space-x-2">
+                      <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">AI Confidence: {{
+                        email.confidence }}%</span>
+                      <span class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                        Processed in {{ email.processingTime }}ms
+                      </span>
+                    </div>
+                    <div>
+                      <span>Last updated: {{ email.lastProcessed }}</span>
+                      <a v-if="email.destinationUrl" :href="email.destinationUrl" target="_blank"
+                        class="text-blue-600 hover:underline ml-2">
+                        View in System
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State -->
+    <div v-else class="text-center py-12 text-gray-500">
+      <p class="text-lg mb-2">No emails found</p>
+      <p class="text-sm">Forward project-related emails to your AI assistant and they will appear here.</p>
+    </div>
+
+    <!-- Preview Payload Modal -->
+    <div v-if="showPayloadModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+      <div class="bg-white rounded-lg shadow-lg p-6 w-full max-w-lg">
+        <h3 class="text-lg font-semibold text-gray-800 mb-4">Preview Payload</h3>
+        <pre
+          class="bg-gray-100 p-4 rounded text-sm text-gray-700 overflow-auto">{{ JSON.stringify(selectedPayload, null, 2) }}</pre>
+        <div class="mt-4 flex justify-end space-x-2">
+          <button @click="showPayloadModal = false"
+            class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          filters: { date: 'Today', status: 'all', user: '', aiCategory: 'all' },
+          emails: [
+            {
+              subject: "Plumbing issue at Site A",
+              projectNumber: "0123",
+              user: "John Doe",
+              time: "2025-08-16 10:32 AM",
+              status: "Completed",
+              projectAddress: "123 Main St",
+              trade: "Plumber",
+              issue: "Leaking pipe in basement",
+              type: "TBD",
+              source: "Email",
+              changeReason: "Client Request",
+              attachments: [
+                { name: "Invoice.pdf", url: "https://example.com/invoice.pdf" },
+                { name: "Blueprint.png", url: "https://example.com/blueprint.png" }
+              ],
+              lineItems: [
+                { description: "Replace broken pipe", cost: 250.0 },
+                { description: "Labor cost", cost: 150.0 }
+              ],
+              open: false,
+              aiSuggestions: [
+                "Forward to plumbing contractor Mike Johnson (555-0123)",
+                "Schedule emergency repair within 24 hours",
+                "Add to weekly maintenance checklist"
+              ],
+              confidence: 94,
+              processingTime: 1247,
+              lastProcessed: "2 mins ago",
+              aiCategory: "plumbing",
+              synced: true,
+              destinationUrl: "https://example.com/project/0123"
+            },
+            {
+              subject: "Electrical outage at Tower B",
+              projectNumber: "0456",
+              user: "Jane Smith",
+              time: "2025-08-16 09:12 AM",
+              status: "Pending Review",
+              projectAddress: "456 High St",
+              trade: "Electrician",
+              issue: "No power on 2nd floor",
+              type: "Contingency",
+              source: "Teams",
+              changeReason: "Design Development",
+              attachments: [],
+              lineItems: [
+                { description: "Inspect electrical panel", cost: 100.0 },
+                { description: "Replace circuit breaker", cost: 200.0 }
+              ],
+              open: false,
+              aiSuggestions: [
+                "Urgent: Contact electrical contractor Sarah Wilson",
+                "Check if backup power is needed",
+                "Verify safety protocols are in place"
+              ],
+              confidence: 87,
+              processingTime: 2156,
+              lastProcessed: "15 mins ago",
+              aiCategory: "electrical",
+              synced: false,
+              destinationUrl: "https://example.com/project/0123"
+            },
+            {
+              subject: "HVAC malfunction - Office C",
+              projectNumber: "0789",
+              user: "Ali Karim",
+              time: "2025-08-15 05:47 PM",
+              status: "Error",
+              projectAddress: "789 Elm St",
+              trade: "HVAC",
+              issue: "Air conditioning not working",
+              type: "Allowance",
+              source: "Email",
+              changeReason: "Existing Condition",
+              attachments: [
+                { name: "MaintenanceReport.docx", url: "https://example.com/maintenance-report.docx" }
+              ],
+              open: false,
+              aiSuggestions: [
+                "Request more details from sender",
+                "Contact HVAC specialist for consultation",
+                "Add to maintenance priority list"
+              ],
+              confidence: 62,
+              processingTime: 3421,
+              lastProcessed: "1 hour ago",
+              aiCategory: "hvac",
+              synced: true,
+              destinationUrl: "https://example.com/project/0123"
+            }
+          ],
+          activityLog: [],
+          showPayloadModal: false,
+          selectedPayload: null,
+        }
+      },
+      computed: {
+        filteredEmails() {
+          return this.emails.filter(e => {
+            const statusMatch = this.filters.status === 'all' || e.status === this.filters.status;
+            const userMatch = this.filters.user === '' || e.user.toLowerCase().includes(this.filters.user.toLowerCase());
+            const categoryMatch = this.filters.aiCategory === 'all' ||
+              e.aiCategory === this.filters.aiCategory;
+
+            return statusMatch && userMatch && categoryMatch;
+          });
+        }
+      },
+      methods: {
+        toggle(email) {
+          email.open = !email.open;
+        },
+        viewActivityLog(email) {
+          this.logActivity(`Viewed activity log for email: "${email.subject}"`);
+          alert(`Activity log for "${email.subject}"`);
+        },
+        approveAndSync(email) {
+          email.syncing = true;
+          this.logActivity(`Syncing email: "${email.subject}"`);
+          setTimeout(() => {
+            if (Math.random() > 0.8) { // Simulate random error
+              email.synced = false;
+              email.syncError = true;
+              this.logActivity(`Sync failed for email: "${email.subject}"`);
+            } else {
+              email.synced = true;
+              email.syncError = false;
+              this.logActivity(`Email synced successfully: "${email.subject}"`);
+            }
+            email.syncing = false;
+          }, 2000);
+        },
+        retrySync(email) {
+          this.approveAndSync(email);
+        },
+        previewPayload(email) {
+          this.selectedPayload = {
+            project: email.projectAddress,
+            tradeType: email.trade,
+            issue: email.issue,
+            user: email.user,
+            status: email.status,
+          };
+          this.showPayloadModal = true;
+        },
+        logActivity(message) {
+          this.activityLog.push({ message, timestamp: new Date().toLocaleString() });
+        },
+      },
+      mounted() {
+        // Removed lucide.createIcons() as Font Awesome does not require initialization
+      }
+    }).mount("#app");
+  </script>
+</body>
+
+</html>
