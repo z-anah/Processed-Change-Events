@@ -10,96 +10,157 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 
-<body>
-  <div id="app" class="min-h-screen bg-gray-50 p-6">
-    <div class="max-w-5xl mx-auto bg-white shadow-lg rounded-lg p-8">
-      <h1 class="text-2xl font-bold mb-6 flex items-center gap-2">
+<body class="bg-gray-100 flex justify-center font-sans">
+  <div id="app" class="w-full bg-white shadow-lg rounded-lg p-6 m-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
         <i class="fa-solid fa-file-invoice-dollar text-green-600"></i>
         Budget Upload Dashboard
       </h1>
-      <!-- Search & Filter -->
-      <div class="flex flex-wrap gap-4 mb-4">
-        <input v-model="search" type="text" placeholder="Search by project, address, user..." class="border rounded px-3 py-2 w-64" />
+      <div class="flex items-center space-x-2">
+        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+        <p class="text-gray-500 text-sm">AI actively monitoring budget uploads</p>
+      </div>
+    </div>
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium mb-1">Status</label>
         <select v-model="filterStatus" class="border rounded px-3 py-2">
           <option value="">All Statuses</option>
           <option value="Completed">Completed</option>
           <option value="Pending Review">Pending Review</option>
           <option value="Error">Error</option>
         </select>
-        <button @click="sortBy('timestamp')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
-          <i class="fa-solid fa-sort"></i> Sort by Date
-        </button>
-        <button @click="sortBy('status')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
-          <i class="fa-solid fa-sort"></i> Sort by Status
-        </button>
       </div>
-      <!-- Table -->
-      <div class="overflow-x-auto">
-        <table class="min-w-full border rounded">
-          <thead class="bg-gray-100">
-            <tr>
-              <th class="px-4 py-2 text-left">Project #</th>
-              <th class="px-4 py-2 text-left">Address</th>
-              <th class="px-4 py-2 text-left">User</th>
-              <th class="px-4 py-2 text-left">Scopes</th>
-              <th class="px-4 py-2 text-left">Timestamp</th>
-              <th class="px-4 py-2 text-left">Sync Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(row, idx) in filteredRows" :key="row.id" class="cursor-pointer hover:bg-blue-50"
-                @click="toggleDetails(idx)">
-              <td class="px-4 py-2 font-mono">{{ row.projectNumber }}</td>
-              <td class="px-4 py-2">{{ row.address }}</td>
-              <td class="px-4 py-2">{{ row.user }}</td>
-              <td class="px-4 py-2">
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">Search</label>
+        <input v-model="search" type="text" placeholder="Search by project, address, user..." class="border rounded px-3 py-2 w-full" />
+      </div>
+      <div>
+        <label class="block text-sm font-medium mb-1">Sort</label>
+        <div class="flex gap-2">
+          <button @click="sortBy('timestamp')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
+            <i class="fa-solid fa-sort"></i> Date
+          </button>
+          <button @click="sortBy('status')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
+            <i class="fa-solid fa-sort"></i> Status
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Table -->
+    <div v-if="filteredRows.length > 0" class="overflow-x-auto">
+      <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+        <thead class="bg-gray-50 text-left text-gray-600 text-sm uppercase">
+          <tr>
+            <th class="px-4 py-3 border">Project #</th>
+            <th class="px-4 py-3 border">Address</th>
+            <th class="px-4 py-3 border">User</th>
+            <th class="px-4 py-3 border">Scopes</th>
+            <th class="px-4 py-3 border">Timestamp</th>
+            <th class="px-4 py-3 border">Status</th>
+            <th class="px-4 py-3 border">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="(row, idx) in filteredRows" :key="row.id">
+            <!-- Main row -->
+            <tr class="hover:bg-blue-50 cursor-pointer" @click="toggle(row)">
+              <td class="px-4 py-3 border font-mono">{{ row.projectNumber }}</td>
+              <td class="px-4 py-3 border">{{ row.address }}</td>
+              <td class="px-4 py-3 border">{{ row.user }}</td>
+              <td class="px-4 py-3 border">
                 <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 mr-1 text-xs">{{ scope }}</span>
               </td>
-              <td class="px-4 py-2">{{ formatDate(row.timestamp) }}</td>
-              <td class="px-4 py-2">
-                <span :class="statusClass(row.status)">
+              <td class="px-4 py-3 border text-sm text-gray-600">{{ formatDate(row.timestamp) }}</td>
+              <td class="px-4 py-3 border">
+                <span :class="{
+                  'px-2 py-1 rounded text-xs font-medium': true,
+                  'bg-green-100 text-green-700': row.status==='Completed',
+                  'bg-yellow-100 text-yellow-700': row.status==='Pending Review',
+                  'bg-red-100 text-red-700': row.status==='Error'
+                }">
                   {{ row.status }}
                 </span>
               </td>
+              <td class="px-4 py-3 border space-x-4">
+                <button @click.stop="toggle(row)" class="text-gray-600 hover:text-blue-600" aria-label="Expand">
+                  <i class="fa-solid fa-expand h-5 w-5"></i>
+                </button>
+                <button @click.stop="viewActivityLog(row)" class="text-gray-600 hover:text-blue-600"
+                  aria-label="Activity Log">
+                  <i class="fa-solid fa-list h-5 w-5"></i>
+                </button>
+              </td>
             </tr>
-            <!-- Details panel -->
-            <tr v-if="expandedIdx === idx">
-              <td colspan="6" class="bg-gray-50 px-6 py-4 border-t">
-                <div class="flex flex-col gap-2">
-                  <div class="font-semibold">
-                    {{ row.projectNumber }} — {{ row.address }}
-                  </div>
-                  <div>
-                    <span class="font-medium">User:</span> {{ row.user }}
-                  </div>
-                  <div>
-                    <span class="font-medium">Scopes:</span>
-                    <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 mr-1 text-xs">{{ scope }}</span>
-                  </div>
-                  <div>
-                    <a :href="row.worksheetUrl" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
-                      <i class="fa-solid fa-file-excel"></i> Budget Worksheet
-                    </a>
-                  </div>
-                  <div>
-                    <span class="font-medium">Total $ Loaded:</span>
-                    <span class="font-mono">{{ formatCurrency(row.totalAmount) }}</span>
-                  </div>
-                  <div>
-                    <span class="font-medium">Total # Lines:</span>
-                    <span class="font-mono">{{ row.totalLines }}</span>
-                  </div>
-                  <div v-if="row.status === 'Completed'">
-                    <a :href="row.destinationUrl" target="_blank" class="text-green-600 hover:underline flex items-center gap-1">
-                      <i class="fa-solid fa-arrow-up-right-from-square"></i> Destination System
-                    </a>
+            <!-- Expanded row -->
+            <tr v-if="row.open">
+              <td colspan="7" class="px-6 py-4 bg-gray-50 border text-sm text-gray-700">
+                <div class="space-y-4">
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Project Information -->
+                    <div class="bg-white p-3 rounded border">
+                      <span class="font-semibold text-gray-600">Project Information:</span>
+                      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 items-center">
+                        <label class="text-sm font-medium text-gray-600">Project #:</label>
+                        <input v-model="row.projectNumber" class="border rounded px-3 py-2 w-full" />
+                        <label class="text-sm font-medium text-gray-600">Address:</label>
+                        <input v-model="row.address" class="border rounded px-3 py-2 w-full" />
+                        <label class="text-sm font-medium text-gray-600">User:</label>
+                        <input v-model="row.user" class="border rounded px-3 py-2 w-full" />
+                        <label class="text-sm font-medium text-gray-600">Scopes:</label>
+                        <div>
+                          <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 mr-1 text-xs">{{ scope }}</span>
+                        </div>
+                        <label class="text-sm font-medium text-gray-600">Timestamp:</label>
+                        <input v-model="row.timestamp" class="border rounded px-3 py-2 w-full" />
+                        <label class="text-sm font-medium text-gray-600">Status:</label>
+                        <span :class="{
+                          'px-2 py-1 rounded text-xs font-medium': true,
+                          'bg-green-100 text-green-700': row.status==='Completed',
+                          'bg-yellow-100 text-yellow-700': row.status==='Pending Review',
+                          'bg-red-100 text-red-700': row.status==='Error'
+                        }">
+                          {{ row.status }}
+                        </span>
+                      </div>
+                    </div>
+                    <!-- Budget Worksheet & Totals -->
+                    <div class="bg-white p-3 rounded border">
+                      <span class="font-semibold text-gray-600">Budget Worksheet:</span>
+                      <div class="mt-2">
+                        <a :href="row.worksheetUrl" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
+                          <i class="fa-solid fa-file-excel"></i> Download Worksheet
+                        </a>
+                      </div>
+                      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 items-center">
+                        <label class="text-sm font-medium text-gray-600">Total $ Loaded:</label>
+                        <span class="font-mono">{{ formatCurrency(row.totalAmount) }}</span>
+                        <label class="text-sm font-medium text-gray-600">Total # Lines:</label>
+                        <span class="font-mono">{{ row.totalLines }}</span>
+                        <label class="text-sm font-medium text-gray-600">Destination:</label>
+                        <div v-if="row.status === 'Completed'">
+                          <a :href="row.destinationUrl" target="_blank" class="text-green-600 hover:underline flex items-center gap-1">
+                            <i class="fa-solid fa-arrow-up-right-from-square"></i> View in System
+                          </a>
+                        </div>
+                        <div v-else class="text-gray-400">N/A</div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </td>
             </tr>
-          </tbody>
-        </table>
-      </div>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <!-- Empty State -->
+    <div v-else class="text-center py-12 text-gray-500">
+      <p class="text-lg mb-2">No budget uploads found</p>
+      <p class="text-sm">Upload budget worksheets to see them tracked here.</p>
     </div>
   </div>
   <script>
@@ -111,7 +172,6 @@
           filterStatus: '',
           sortKey: '',
           sortAsc: true,
-          expandedIdx: null,
           rows: [
             {
               id: 1,
@@ -124,7 +184,8 @@
               worksheetUrl: 'https://example.com/budget-worksheet-0042.xlsx',
               totalAmount: 1250000,
               totalLines: 42,
-              destinationUrl: 'https://destination-system.com/project/0042'
+              destinationUrl: 'https://destination-system.com/project/0042',
+              open: false
             },
             {
               id: 2,
@@ -137,7 +198,8 @@
               worksheetUrl: 'https://example.com/budget-worksheet-0077.xlsx',
               totalAmount: 980000,
               totalLines: 35,
-              destinationUrl: ''
+              destinationUrl: '',
+              open: false
             },
             {
               id: 3,
@@ -150,7 +212,8 @@
               worksheetUrl: 'https://example.com/budget-worksheet-0123.xlsx',
               totalAmount: 0,
               totalLines: 0,
-              destinationUrl: ''
+              destinationUrl: '',
+              open: false
             }
           ]
         };
@@ -200,13 +263,8 @@
           if (status === 'Error') return 'text-red-700 font-semibold';
           return '';
         },
-        toggleDetails(idx) {
-          console.log(`Toggling details for row ${idx}`);
-          
-          this.expandedIdx = this.expandedIdx === idx ? null : idx;
-
-          console.log(`Expanded index is now: ${this.expandedIdx}`); // Debugging log
-          
+        toggle(row) {
+          row.open = !row.open;
         },
         sortBy(key) {
           if (this.sortKey === key) {
@@ -218,6 +276,7 @@
         }
       }
     }).mount('#app');
-  </script>
-</body>
-</html>
+        </script>
+  </body>
+  
+  </html>
