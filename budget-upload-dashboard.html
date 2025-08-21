@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Budget Upload Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+
+<body>
+  <div id="app" class="min-h-screen bg-gray-50 p-6">
+    <div class="max-w-5xl mx-auto bg-white shadow-lg rounded-lg p-8">
+      <h1 class="text-2xl font-bold mb-6 flex items-center gap-2">
+        <i class="fa-solid fa-file-invoice-dollar text-green-600"></i>
+        Budget Upload Dashboard
+      </h1>
+      <!-- Search & Filter -->
+      <div class="flex flex-wrap gap-4 mb-4">
+        <input v-model="search" type="text" placeholder="Search by project, address, user..." class="border rounded px-3 py-2 w-64" />
+        <select v-model="filterStatus" class="border rounded px-3 py-2">
+          <option value="">All Statuses</option>
+          <option value="Completed">Completed</option>
+          <option value="Pending Review">Pending Review</option>
+          <option value="Error">Error</option>
+        </select>
+        <button @click="sortBy('timestamp')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
+          <i class="fa-solid fa-sort"></i> Sort by Date
+        </button>
+        <button @click="sortBy('status')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
+          <i class="fa-solid fa-sort"></i> Sort by Status
+        </button>
+      </div>
+      <!-- Table -->
+      <div class="overflow-x-auto">
+        <table class="min-w-full border rounded">
+          <thead class="bg-gray-100">
+            <tr>
+              <th class="px-4 py-2 text-left">Project #</th>
+              <th class="px-4 py-2 text-left">Address</th>
+              <th class="px-4 py-2 text-left">User</th>
+              <th class="px-4 py-2 text-left">Scopes</th>
+              <th class="px-4 py-2 text-left">Timestamp</th>
+              <th class="px-4 py-2 text-left">Sync Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="(row, idx) in filteredRows" :key="row.id" class="cursor-pointer hover:bg-blue-50"
+                @click="toggleDetails(idx)">
+              <td class="px-4 py-2 font-mono">{{ row.projectNumber }}</td>
+              <td class="px-4 py-2">{{ row.address }}</td>
+              <td class="px-4 py-2">{{ row.user }}</td>
+              <td class="px-4 py-2">
+                <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 mr-1 text-xs">{{ scope }}</span>
+              </td>
+              <td class="px-4 py-2">{{ formatDate(row.timestamp) }}</td>
+              <td class="px-4 py-2">
+                <span :class="statusClass(row.status)">
+                  {{ row.status }}
+                </span>
+              </td>
+            </tr>
+            <!-- Details panel -->
+            <tr v-if="expandedIdx === idx">
+              <td colspan="6" class="bg-gray-50 px-6 py-4 border-t">
+                <div class="flex flex-col gap-2">
+                  <div class="font-semibold">
+                    {{ row.projectNumber }} — {{ row.address }}
+                  </div>
+                  <div>
+                    <span class="font-medium">User:</span> {{ row.user }}
+                  </div>
+                  <div>
+                    <span class="font-medium">Scopes:</span>
+                    <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 mr-1 text-xs">{{ scope }}</span>
+                  </div>
+                  <div>
+                    <a :href="row.worksheetUrl" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
+                      <i class="fa-solid fa-file-excel"></i> Budget Worksheet
+                    </a>
+                  </div>
+                  <div>
+                    <span class="font-medium">Total $ Loaded:</span>
+                    <span class="font-mono">{{ formatCurrency(row.totalAmount) }}</span>
+                  </div>
+                  <div>
+                    <span class="font-medium">Total # Lines:</span>
+                    <span class="font-mono">{{ row.totalLines }}</span>
+                  </div>
+                  <div v-if="row.status === 'Completed'">
+                    <a :href="row.destinationUrl" target="_blank" class="text-green-600 hover:underline flex items-center gap-1">
+                      <i class="fa-solid fa-arrow-up-right-from-square"></i> Destination System
+                    </a>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          search: '',
+          filterStatus: '',
+          sortKey: '',
+          sortAsc: true,
+          expandedIdx: null,
+          rows: [
+            {
+              id: 1,
+              projectNumber: '0042',
+              address: '123 Main St, Springfield',
+              user: 'jdoe',
+              scopes: ['CSTRN', 'FFE'],
+              timestamp: '2025-08-20T09:15:00',
+              status: 'Completed',
+              worksheetUrl: 'https://example.com/budget-worksheet-0042.xlsx',
+              totalAmount: 1250000,
+              totalLines: 42,
+              destinationUrl: 'https://destination-system.com/project/0042'
+            },
+            {
+              id: 2,
+              projectNumber: '0077',
+              address: '456 Elm St, Shelbyville',
+              user: 'asmith',
+              scopes: ['AVIT', 'Soft Costs'],
+              timestamp: '2025-08-21T14:30:00',
+              status: 'Pending Review',
+              worksheetUrl: 'https://example.com/budget-worksheet-0077.xlsx',
+              totalAmount: 980000,
+              totalLines: 35,
+              destinationUrl: ''
+            },
+            {
+              id: 3,
+              projectNumber: '0123',
+              address: '789 Oak St, Ogdenville',
+              user: 'bwayne',
+              scopes: ['CSTRN', 'FFE', 'AVIT'],
+              timestamp: '2025-08-22T11:00:00',
+              status: 'Error',
+              worksheetUrl: 'https://example.com/budget-worksheet-0123.xlsx',
+              totalAmount: 0,
+              totalLines: 0,
+              destinationUrl: ''
+            }
+          ]
+        };
+      },
+      computed: {
+        filteredRows() {
+          let result = this.rows;
+          if (this.search) {
+            const s = this.search.toLowerCase();
+            result = result.filter(r =>
+              r.projectNumber.includes(s) ||
+              r.address.toLowerCase().includes(s) ||
+              r.user.toLowerCase().includes(s)
+            );
+          }
+          if (this.filterStatus) {
+            result = result.filter(r => r.status === this.filterStatus);
+          }
+          if (this.sortKey) {
+            result = result.slice().sort((a, b) => {
+              let va = a[this.sortKey], vb = b[this.sortKey];
+              if (this.sortKey === 'timestamp') {
+                va = new Date(va); vb = new Date(vb);
+              }
+              if (va < vb) return this.sortAsc ? -1 : 1;
+              if (va > vb) return this.sortAsc ? 1 : -1;
+              return 0;
+            });
+          }
+          return result;
+        }
+      },
+      methods: {
+        formatDate(ts) {
+          const d = new Date(ts);
+          return d.toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit'
+          });
+        },
+        formatCurrency(val) {
+          return val.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+        },
+        statusClass(status) {
+          if (status === 'Completed') return 'text-green-700 font-semibold';
+          if (status === 'Pending Review') return 'text-yellow-700 font-semibold';
+          if (status === 'Error') return 'text-red-700 font-semibold';
+          return '';
+        },
+        toggleDetails(idx) {
+          console.log(`Toggling details for row ${idx}`);
+          
+          this.expandedIdx = this.expandedIdx === idx ? null : idx;
+
+          console.log(`Expanded index is now: ${this.expandedIdx}`); // Debugging log
+          
+        },
+        sortBy(key) {
+          if (this.sortKey === key) {
+            this.sortAsc = !this.sortAsc;
+          } else {
+            this.sortKey = key;
+            this.sortAsc = true;
+          }
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
