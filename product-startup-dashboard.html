@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Product Startup Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body class="bg-gray-100 flex justify-center font-sans">
+  <div id="app" class="w-full bg-white shadow-lg rounded-lg p-6 m-6">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6">
+      <h1 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+        <i class="fa-solid fa-rocket text-blue-600"></i>
+        Product Startup Dashboard
+      </h1>
+      <div class="flex items-center space-x-2">
+        <div class="w-2 h-2 bg-green-500 rounded-full"></div>
+        <p class="text-gray-500 text-sm">AI actively monitoring project startups</p>
+      </div>
+    </div>
+    <!-- Filters -->
+    <div class="flex flex-wrap gap-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium mb-1">Startup Status</label>
+        <select v-model="filterStatus" class="border rounded px-3 py-2">
+          <option value="">All Statuses</option>
+          <option value="Completed">Completed</option>
+          <option value="Error">Error</option>
+        </select>
+      </div>
+      <div class="flex-1">
+        <label class="block text-sm font-medium mb-1">Search</label>
+        <input v-model="search" type="text" placeholder="Search by project, address, user..." class="border rounded px-3 py-2 w-full" />
+      </div>
+    </div>
+    <!-- Table -->
+    <div v-if="filteredRows.length > 0" class="overflow-x-auto">
+      <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden">
+        <thead class="bg-gray-50 text-left text-gray-600 text-sm uppercase">
+          <tr>
+            <th class="px-4 py-3 border cursor-pointer select-none" @click="sortBy('projectNumber')">
+              Project #
+              <span v-if="sortKey==='projectNumber'">
+                <i :class="sortAsc ? 'fa-solid fa-arrow-up text-xs' : 'fa-solid fa-arrow-down text-xs'"></i>
+              </span>
+            </th>
+            <th class="px-4 py-3 border">Address</th>
+            <th class="px-4 py-3 border">User</th>
+            <th class="px-4 py-3 border cursor-pointer select-none" @click="sortBy('timestamp')">
+              Timestamp
+              <span v-if="sortKey==='timestamp'">
+                <i :class="sortAsc ? 'fa-solid fa-arrow-up text-xs' : 'fa-solid fa-arrow-down text-xs'"></i>
+              </span>
+            </th>
+            <th class="px-4 py-3 border">Business Days</th>
+            <th class="px-4 py-3 border cursor-pointer select-none" @click="sortBy('startupStatus')">
+              Startup Status
+              <span v-if="sortKey==='startupStatus'">
+                <i :class="sortAsc ? 'fa-solid fa-arrow-up text-xs' : 'fa-solid fa-arrow-down text-xs'"></i>
+              </span>
+            </th>
+            <th class="px-4 py-3 border">Trades Status</th>
+            <th class="px-4 py-3 border">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template v-for="(row, idx) in filteredRows" :key="row.id">
+            <!-- Main row -->
+            <tr class="hover:bg-blue-50 cursor-pointer" @click="toggle(row)">
+              <td class="px-4 py-3 border font-mono">{{ row.projectNumber }}</td>
+              <td class="px-4 py-3 border">{{ row.address }}</td>
+              <td class="px-4 py-3 border">{{ row.user }}</td>
+              <td class="px-4 py-3 border text-sm text-gray-600">{{ formatDate(row.timestamp) }}</td>
+              <td class="px-4 py-3 border text-center">{{ businessDays(row.timestamp) }}</td>
+              <td class="px-4 py-3 border">
+                <span :class="{
+                  'px-2 py-1 rounded text-xs font-medium': true,
+                  'bg-green-100 text-green-700': row.startupStatus==='Completed',
+                  'bg-red-100 text-red-700': row.startupStatus==='Error'
+                }">
+                  {{ row.startupStatus }}
+                </span>
+              </td>
+              <td class="px-4 py-3 border">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono">{{ row.tradesCompleted }}/{{ row.tradesTotal }}</span>
+                  <div class="w-24 h-2 bg-gray-200 rounded">
+                    <div
+                      class="h-2 bg-blue-500 rounded"
+                      :style="{ width: ((row.tradesCompleted/row.tradesTotal)*100)+'%' }"
+                    ></div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-3 border space-x-4">
+                <button @click.stop="toggle(row)" class="text-gray-600 hover:text-blue-600" aria-label="Expand">
+                  <i class="fa-solid fa-expand h-5 w-5"></i>
+                </button>
+                <button @click.stop="sendFollowUp(row)" class="text-blue-600 hover:text-blue-800" aria-label="Send Reminder">
+                  <i class="fa-solid fa-envelope"></i>
+                </button>
+              </td>
+            </tr>
+            <!-- Expanded row -->
+            <tr v-if="row.id === expandedId"><td colspan="8" class="px-6 py-4 bg-gray-50 border text-sm text-gray-700">
+  <div class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Links & Insurance -->
+      <div class="bg-white p-4 rounded border">
+        <h3 class="font-semibold text-gray-700">Links & Insurance</h3>
+        <div class="mt-3 space-y-3">
+          <!-- Links -->
+          <div>
+            <a :href="row.manualUrl" target="_blank" class="text-blue-600 hover:underline flex items-center gap-2">
+              <i class="fa-solid fa-file-pdf"></i>
+              Building Manual (PDF)
+            </a>
+          </div>
+          <div>
+            <a :href="row.systemUrl" target="_blank" class="text-green-600 hover:underline flex items-center gap-2">
+              <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              System Page
+            </a>
+          </div>
+          <!-- Insurance Requirements -->
+          <div class="mt-4">
+            <h4 class="font-semibold text-gray-700 mb-2">Insurance Requirements</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div class="bg-gray-50 border rounded p-3 flex flex-col items-start">
+                <span class="text-xs text-gray-500 mb-1">Certificate Holder</span>
+                <span class="font-medium text-gray-800">{{ row.insurance.certificateHolder }}</span>
+              </div>
+              <div class="bg-gray-50 border rounded p-3 flex flex-col items-start">
+                <span class="text-xs text-gray-500 mb-1">Additional Insured</span>
+                <span class="font-medium text-gray-800">{{ row.insurance.additionalInsured }}</span>
+              </div>
+              <div class="bg-gray-50 border rounded p-3 flex flex-col items-start">
+                <span class="text-xs text-gray-500 mb-1">Liability Amount</span>
+                <span class="font-medium text-gray-800">{{ row.insurance.liabilityAmount }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Trades Checklist -->
+      <div class="bg-white p-4 rounded border">
+        <h3 class="font-semibold text-gray-700">Trades Checklist</h3>
+        <div class="mt-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div v-for="trade in row.trades" :key="trade.name" class="flex flex-col bg-gray-50 border rounded p-3 gap-2">
+              <div class="flex items-center justify-between">
+                <span class="font-mono text-sm">{{ trade.name }}</span>
+                <span :class="{
+                  'px-2 py-1 rounded text-xs font-medium': true,
+                  'bg-gray-200 text-gray-600': trade.status === 'No Response',
+                  'bg-yellow-100 text-yellow-700': trade.status === 'Partial',
+                  'bg-green-100 text-green-700': trade.status === 'Completed'
+                }">
+                  {{ trade.status }}
+                </span>
+              </div>
+              <div v-if="trade.docs?.length" class="flex flex-wrap gap-2 mt-1">
+                <a v-for="doc in trade.docs" :key="doc.name" :href="doc.url" target="_blank"
+                  class="text-blue-600 hover:underline text-xs flex items-center gap-1">
+                  <i class="fa-solid fa-file"></i>
+                  {{ doc.name }}
+                </a>
+              </div>
+              <div v-else class="text-xs text-gray-400 mt-1">No documents</div>
+            </div>
+          </div>
+          <!-- Progress bar -->
+          <div class="mt-6 flex items-center gap-3">
+            <span class="font-mono text-sm">
+              {{ row.tradesCompleted }}/{{ row.tradesTotal }} trades completed
+            </span>
+            <div class="w-32 h-2 bg-gray-200 rounded">
+              <div class="h-2 bg-blue-500 rounded"
+                :style="{ width: ((row.tradesCompleted / row.tradesTotal) * 100) + '%' }"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Follow-up Action -->
+    <div class="flex justify-end">
+      <button @click="sendFollowUp(row)"
+        class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2">
+        <i class="fa-solid fa-envelope"></i>
+        Send Follow-up / Reminders
+      </button>
+    </div>
+  </div>
+</td>
+</tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+    <!-- Empty State -->
+    <div v-else class="text-center py-12 text-gray-500">
+      <p class="text-lg mb-2">No startups found</p>
+      <p class="text-sm">Startup requests will appear here as they are sent.</p>
+    </div>
+  </div>
+  <script>
+    const { createApp } = Vue;
+    createApp({
+      data() {
+        return {
+          search: '',
+          filterStatus: '',
+          sortKey: '',
+          sortAsc: true,
+          expandedId: null,
+          rows: [
+            {
+              id: 1,
+              projectNumber: '0042',
+              address: '123 Main St, Springfield',
+              user: 'jdoe',
+              timestamp: '2025-08-20T09:15:00',
+              startupStatus: 'Completed',
+              tradesCompleted: 8,
+              tradesTotal: 10,
+              manualUrl: 'https://example.com/building-manual-0042.pdf',
+              systemUrl: 'https://system.com/project/0042',
+              insurance: {
+                certificateHolder: 'Acme Corp',
+                additionalInsured: 'Linea LLC',
+                liabilityAmount: '$2,000,000'
+              },
+              trades: [
+                { name: 'Plumbing', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Electrical', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'HVAC', status: 'Partial', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Fire Protection', status: 'No Response', docs: [] },
+                { name: 'Roofing', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Carpentry', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Masonry', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Flooring', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Painting', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Glazing', status: 'No Response', docs: [] }
+              ]
+            },
+            {
+              id: 2,
+              projectNumber: '0077',
+              address: '456 Elm St, Shelbyville',
+              user: 'asmith',
+              timestamp: '2025-08-21T14:30:00',
+              startupStatus: 'Error',
+              tradesCompleted: 3,
+              tradesTotal: 10,
+              manualUrl: 'https://example.com/building-manual-0077.pdf',
+              systemUrl: 'https://system.com/project/0077',
+              insurance: {
+                certificateHolder: 'Beta Holdings',
+                additionalInsured: 'Linea LLC',
+                liabilityAmount: '$1,000,000'
+              },
+              trades: [
+                { name: 'Plumbing', status: 'No Response', docs: [] },
+                { name: 'Electrical', status: 'Partial', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'HVAC', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Fire Protection', status: 'No Response', docs: [] },
+                { name: 'Roofing', status: 'No Response', docs: [] },
+                { name: 'Carpentry', status: 'Completed', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Masonry', status: 'No Response', docs: [] },
+                { name: 'Flooring', status: 'Partial', docs: [{ name: 'Cert.pdf', url: '#' }] },
+                { name: 'Painting', status: 'No Response', docs: [] },
+                { name: 'Glazing', status: 'No Response', docs: [] }
+              ]
+            }
+          ]
+        };
+      },
+      computed: {
+        filteredRows() {
+          let result = this.rows;
+          if (this.search) {
+            const s = this.search.toLowerCase();
+            result = result.filter(r =>
+              r.projectNumber.includes(s) ||
+              r.address.toLowerCase().includes(s) ||
+              r.user.toLowerCase().includes(s)
+            );
+          }
+          if (this.filterStatus) {
+            result = result.filter(r => r.startupStatus === this.filterStatus);
+          }
+          if (this.sortKey) {
+            result = result.slice().sort((a, b) => {
+              let va = a[this.sortKey], vb = b[this.sortKey];
+              if (this.sortKey === 'timestamp') {
+                va = new Date(va); vb = new Date(vb);
+              }
+              if (va < vb) return this.sortAsc ? -1 : 1;
+              if (va > vb) return this.sortAsc ? 1 : -1;
+              return 0;
+            });
+          }
+          return result;
+        }
+      },
+      methods: {
+        formatDate(ts) {
+          const d = new Date(ts);
+          return d.toLocaleString('en-US', {
+            month: 'short', day: 'numeric', year: 'numeric',
+            hour: 'numeric', minute: '2-digit'
+          });
+        },
+        businessDays(ts) {
+          // Calculate business days since sent
+          const sent = new Date(ts);
+          const now = new Date();
+          let days = 0, current = new Date(sent);
+          while (current < now) {
+            const day = current.getDay();
+            if (day !== 0 && day !== 6) days++;
+            current.setDate(current.getDate() + 1);
+          }
+          return days;
+        },
+        toggle(row) {
+          this.expandedId = this.expandedId === row.id ? null : row.id;
+        },
+        sortBy(key) {
+          if (this.sortKey === key) {
+            this.sortAsc = !this.sortAsc;
+          } else {
+            this.sortKey = key;
+            this.sortAsc = true;
+          }
+        },
+        sendFollowUp(row) {
+          alert(`Follow-up/reminder sent for project ${row.projectNumber}`);
+        }
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

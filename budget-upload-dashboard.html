@@ -38,29 +38,36 @@
         <label class="block text-sm font-medium mb-1">Search</label>
         <input v-model="search" type="text" placeholder="Search by project, address, user..." class="border rounded px-3 py-2 w-full" />
       </div>
-      <div>
-        <label class="block text-sm font-medium mb-1">Sort</label>
-        <div class="flex gap-2">
-          <button @click="sortBy('timestamp')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
-            <i class="fa-solid fa-sort"></i> Date
-          </button>
-          <button @click="sortBy('status')" class="px-3 py-2 rounded bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center gap-1">
-            <i class="fa-solid fa-sort"></i> Status
-          </button>
-        </div>
-      </div>
     </div>
     <!-- Table -->
     <div v-if="filteredRows.length > 0" class="overflow-x-auto">
       <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden">
         <thead class="bg-gray-50 text-left text-gray-600 text-sm uppercase">
           <tr>
-            <th class="px-4 py-3 border">Project #</th>
+            <th class="px-4 py-3 border cursor-pointer select-none"
+                @click="sortBy('projectNumber')">
+              Project #
+              <span v-if="sortKey==='projectNumber'">
+                <i :class="sortAsc ? 'fa-solid fa-arrow-up text-xs' : 'fa-solid fa-arrow-down text-xs'"></i>
+              </span>
+            </th>
             <th class="px-4 py-3 border">Address</th>
             <th class="px-4 py-3 border">User</th>
             <th class="px-4 py-3 border">Scopes</th>
-            <th class="px-4 py-3 border">Timestamp</th>
-            <th class="px-4 py-3 border">Status</th>
+            <th class="px-4 py-3 border cursor-pointer select-none"
+                @click="sortBy('timestamp')">
+              Timestamp
+              <span v-if="sortKey==='timestamp'">
+                <i :class="sortAsc ? 'fa-solid fa-arrow-up text-xs' : 'fa-solid fa-arrow-down text-xs'"></i>
+              </span>
+            </th>
+            <th class="px-4 py-3 border cursor-pointer select-none"
+                @click="sortBy('status')">
+              Status
+              <span v-if="sortKey==='status'">
+                <i :class="sortAsc ? 'fa-solid fa-arrow-up text-xs' : 'fa-solid fa-arrow-down text-xs'"></i>
+              </span>
+            </th>
             <th class="px-4 py-3 border">Action</th>
           </tr>
         </thead>
@@ -96,7 +103,7 @@
               </td>
             </tr>
             <!-- Expanded row -->
-            <tr v-if="row.open">
+            <tr v-if="row.id === expandedId">
               <td colspan="7" class="px-6 py-4 bg-gray-50 border text-sm text-gray-700">
                 <div class="space-y-4">
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -111,8 +118,42 @@
                         <label class="text-sm font-medium text-gray-600">User:</label>
                         <input v-model="row.user" class="border rounded px-3 py-2 w-full" />
                         <label class="text-sm font-medium text-gray-600">Scopes:</label>
-                        <div>
-                          <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 mr-1 text-xs">{{ scope }}</span>
+                        <div class="relative w-full">
+                          <input
+                            type="text"
+                            v-model="scopeSearch"
+                            placeholder="Search scopes..."
+                            class="border rounded px-3 py-2 w-full mb-2"
+                            @focus="scopeDropdownOpen = row.id"
+                            @keydown.esc="scopeDropdownOpen = null"
+                          />
+                          <div v-if="scopeDropdownOpen === row.id" class="absolute z-10 bg-white border rounded shadow w-full max-h-40 overflow-auto">
+                            <div class="flex justify-end px-2 py-1">
+                              <button type="button" @mousedown.prevent="scopeDropdownOpen = null" class="text-xs text-gray-500 hover:text-blue-600">
+                                <i class="fa fa-times"></i> Close
+                              </button>
+                            </div>
+                            <div
+                              v-for="scope in filteredScopes"
+                              :key="scope"
+                              class="px-3 py-2 cursor-pointer hover:bg-blue-100 flex items-center"
+                              @mousedown.prevent="toggleScope(row, scope)"
+                            >
+                              <input
+                                type="checkbox"
+                                :checked="row.scopes.includes(scope)"
+                                class="mr-2 accent-blue-600 pointer-events-none"
+                                tabindex="-1"
+                              />
+                              <span class="text-xs">{{ scope }}</span>
+                            </div>
+                          </div>
+                          <div class="flex flex-wrap gap-2 mt-1">
+                            <span v-for="scope in row.scopes" :key="scope" class="inline-block bg-gray-200 rounded px-2 py-1 text-xs">
+                              {{ scope }}
+                              <button type="button" @click.stop="removeScope(row, scope)" class="ml-1 text-red-500 hover:text-red-700">&times;</button>
+                            </span>
+                          </div>
                         </div>
                         <label class="text-sm font-medium text-gray-600">Timestamp:</label>
                         <input v-model="row.timestamp" class="border rounded px-3 py-2 w-full" />
@@ -128,25 +169,57 @@
                       </div>
                     </div>
                     <!-- Budget Worksheet & Totals -->
-                    <div class="bg-white p-3 rounded border">
-                      <span class="font-semibold text-gray-600">Budget Worksheet:</span>
-                      <div class="mt-2">
-                        <a :href="row.worksheetUrl" target="_blank" class="text-blue-600 hover:underline flex items-center gap-1">
-                          <i class="fa-solid fa-file-excel"></i> Download Worksheet
+                    <div class="bg-white p-4 rounded border flex flex-col gap-4">
+                      <h3 class="font-semibold text-gray-700">Budget Worksheet</h3>
+                      <!-- Download Worksheet -->
+                      <div class="bg-gray-50 border rounded p-3 flex items-center gap-2">
+                        <i class="fa-solid fa-file-excel text-blue-600"></i>
+                        <a :href="row.worksheetUrl" target="_blank" class="text-blue-600 hover:underline font-medium">
+                          Download Worksheet
                         </a>
                       </div>
-                      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 items-center">
-                        <label class="text-sm font-medium text-gray-600">Total $ Loaded:</label>
-                        <span class="font-mono">{{ formatCurrency(row.totalAmount) }}</span>
-                        <label class="text-sm font-medium text-gray-600">Total # Lines:</label>
-                        <span class="font-mono">{{ row.totalLines }}</span>
-                        <label class="text-sm font-medium text-gray-600">Destination:</label>
+                      <!-- Total $ Loaded -->
+                      <div class="bg-gray-50 border rounded p-3 flex flex-col">
+                        <span class="text-xs text-gray-500 mb-1">Total $ Loaded</span>
+                        <span class="font-mono text-lg">{{ formatCurrency(row.totalAmount) }}</span>
+                      </div>
+                      <!-- Total # Lines -->
+                      <div class="bg-gray-50 border rounded p-3 flex flex-col">
+                        <span class="text-xs text-gray-500 mb-1">Total # Lines</span>
+                        <span class="font-mono text-lg">{{ row.totalLines }}</span>
+                      </div>
+                      <!-- Destination -->
+                      <div class="bg-gray-50 border rounded p-3 flex flex-col">
+                        <span class="text-xs text-gray-500 mb-1">Destination</span>
                         <div v-if="row.status === 'Completed'">
                           <a :href="row.destinationUrl" target="_blank" class="text-green-600 hover:underline flex items-center gap-1">
                             <i class="fa-solid fa-arrow-up-right-from-square"></i> View in System
                           </a>
                         </div>
-                        <div v-else class="text-gray-400">N/A</div>
+                        <div v-else class="text-gray-400 text-lg">N/A</div>
+                      </div>
+                      <!-- Line Items -->
+                      <div class="bg-gray-50 border rounded p-3 flex flex-col">
+                        <span class="font-semibold text-gray-600 mb-2">Line Items:</span>
+                        <div v-if="!row.lineItems || row.lineItems.length === 0" class="text-sm text-gray-400">
+                          No line items available
+                        </div>
+                        <div v-else>
+                          <table class="min-w-full border border-gray-200 rounded-lg overflow-hidden mt-2">
+                            <thead class="bg-gray-50 text-left text-gray-600 text-sm uppercase">
+                              <tr>
+                                <th class="px-4 py-3 border">Description</th>
+                                <th class="px-4 py-3 border">$ Cost</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr v-for="(item, i) in row.lineItems" :key="i" class="hover:bg-gray-50">
+                                <td class="px-4 py-3 border">{{ item.description }}</td>
+                                <td class="px-4 py-3 border text-right">{{ formatCurrency(item.cost) }}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -172,6 +245,10 @@
           filterStatus: '',
           sortKey: '',
           sortAsc: true,
+          expandedId: null,
+          scopeSearch: '',
+          scopeDropdownOpen: null,
+          allScopes: ['CSTRN', 'FFE', 'AVIT', 'Soft Costs'],
           rows: [
             {
               id: 1,
@@ -184,8 +261,7 @@
               worksheetUrl: 'https://example.com/budget-worksheet-0042.xlsx',
               totalAmount: 1250000,
               totalLines: 42,
-              destinationUrl: 'https://destination-system.com/project/0042',
-              open: false
+              destinationUrl: 'https://destination-system.com/project/0042'
             },
             {
               id: 2,
@@ -198,8 +274,7 @@
               worksheetUrl: 'https://example.com/budget-worksheet-0077.xlsx',
               totalAmount: 980000,
               totalLines: 35,
-              destinationUrl: '',
-              open: false
+              destinationUrl: ''
             },
             {
               id: 3,
@@ -212,8 +287,7 @@
               worksheetUrl: 'https://example.com/budget-worksheet-0123.xlsx',
               totalAmount: 0,
               totalLines: 0,
-              destinationUrl: '',
-              open: false
+              destinationUrl: ''
             }
           ]
         };
@@ -244,6 +318,10 @@
             });
           }
           return result;
+        },
+        filteredScopes() {
+          const s = this.scopeSearch.toLowerCase();
+          return this.allScopes.filter(scope => scope.toLowerCase().includes(s));
         }
       },
       methods: {
@@ -264,7 +342,7 @@
           return '';
         },
         toggle(row) {
-          row.open = !row.open;
+          this.expandedId = this.expandedId === row.id ? null : row.id;
         },
         sortBy(key) {
           if (this.sortKey === key) {
@@ -273,10 +351,20 @@
             this.sortKey = key;
             this.sortAsc = true;
           }
+        },
+        toggleScope(row, scope) {
+          if (row.scopes.includes(scope)) {
+            row.scopes = row.scopes.filter(s => s !== scope);
+          } else {
+            row.scopes.push(scope);
+          }
+        },
+        removeScope(row, scope) {
+          row.scopes = row.scopes.filter(s => s !== scope);
         }
       }
     }).mount('#app');
-        </script>
-  </body>
-  
-  </html>
+  </script>
+</body>
+
+</html>
